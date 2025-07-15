@@ -1,11 +1,11 @@
-# ==== Import required modules ====
 from flask import Flask
 from threading import Thread
 from telethon import TelegramClient, events
 import logging
-import asyncio  # Needed for delay
+import asyncio
+import random  # 👈 For random delay
 
-# ==== Flask app for keeping bot alive ====
+# === Flask app to keep alive ===
 app = Flask(__name__)
 
 @app.route('/')
@@ -15,45 +15,41 @@ def home():
 def run():
     app.run(host='0.0.0.0', port=10000)
 
-# Start Flask server in a separate thread
 Thread(target=run).start()
 
-# ==== Telegram API credentials ====
+# === Telegram credentials ===
 api_id = 24753135
 api_hash = '52811df3777abd38394499b1e3060448'
 bot_token = '7995114209:AAEWRCYLeq0Ck8F8NaVPQ-KqYLBRrudn158'
-channel_username = 'shoppingwithusonline'  # No @ symbol
+channel_username = 'shoppingwithusonline'
 
-# ==== Set up logging ====
-logging.basicConfig(level=logging.INFO)
-
-# ==== Start Telethon client ====
+# === Start Telethon bot ===
 client = TelegramClient('bot_session', api_id, api_hash).start(bot_token=bot_token)
 
-# ==== Store previous message ID ====
-last_message_id = None
-
-# ==== Event handler for new messages ====
 @client.on(events.NewMessage(chats=channel_username))
 async def handler(event):
-    global last_message_id
-
-    # Delay before deleting previous message
-    if last_message_id:
-        try:
-            await asyncio.sleep(5)  # 🕒 Delay to appear human-like
-            await client.delete_messages(channel_username, last_message_id)
-            print(f"Deleted previous message ID: {last_message_id}")
-        except Exception as e:
-            print(f"Error deleting previous message: {e}")
-
-    # If current message has no media, delete it
+    # === Delete non-media messages with random delay ===
     if not event.message.media:
+        delay = random.uniform(2, 5)  # 🕒 Delay between 2–5 seconds
+        await asyncio.sleep(delay)
         await event.delete()
-        print("Deleted non-media message.")
-    else:
-        # Save current media message ID
-        last_message_id = event.message.id
+        print(f"Deleted non-media message after {delay:.1f}s delay.")
+        return
 
-# ==== Start listening to Telegram ====
+    # === Wait before deleting older media posts ===
+    await asyncio.sleep(5)
+
+    try:
+        # Get last 5 messages
+        messages = await client.get_messages(channel_username, limit=5)
+
+        # Delete all except the current one
+        for msg in messages:
+            if msg.id != event.message.id:
+                await client.delete_messages(channel_username, msg.id)
+                print(f"Deleted old message ID: {msg.id}")
+    except Exception as e:
+        print(f"Error cleaning up messages: {e}")
+
+# === Start the bot ===
 client.run_until_disconnected()
